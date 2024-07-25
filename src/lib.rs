@@ -1,17 +1,32 @@
-mod poll;
-mod afit;
+//! The point of this crate is to experiment with writing `map` and `merge`
+//! combinators on the `poll_next` and `async fn next` versions of async
+//! iterators.
+//!
+//! This module contains code that is used in common between the other two.
 
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
+#![feature(async_iterator, noop_waker, async_for_loop, gen_blocks)]
+
+use std::future::Future;
+use std::pin::{pin, Pin};
+use std::task::{Context, Poll};
+
+mod afit;
+mod poll;
+
+pub enum Either<A, B> {
+    Left(A),
+    Right(B),
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+fn block_on<F: Future>(f: F) -> F::Output {
+    let waker = std::task::Waker::noop();
+    let mut cx = Context::from_waker(&waker);
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+    let mut f = pin!(f);
+    loop {
+        match f.as_mut().poll(&mut cx) {
+            Poll::Ready(val) => return val,
+            Poll::Pending => (),
+        }
     }
 }
