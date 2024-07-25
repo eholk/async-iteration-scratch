@@ -4,7 +4,8 @@
 //!
 //! This module contains code that is used in common between the other two.
 
-#![feature(async_iterator, noop_waker, async_for_loop, gen_blocks)]
+#![feature(async_iterator, noop_waker, async_for_loop, gen_blocks, async_closure)]
+#![allow(unstable_features)]
 
 use std::future::Future;
 use std::pin::{pin, Pin};
