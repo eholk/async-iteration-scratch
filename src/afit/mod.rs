@@ -1,6 +1,7 @@
 use std::pin::Pin;
 
 mod map;
+mod merge;
 
 pub trait AsyncIterator {
     type Item;

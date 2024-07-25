@@ -8,7 +8,7 @@
 #![allow(unstable_features)]
 
 use std::future::Future;
-use std::pin::{pin, Pin};
+use std::pin::pin;
 use std::task::{Context, Poll};
 
 mod afit;
