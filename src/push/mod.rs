@@ -22,34 +22,6 @@ pub trait Stream {
     }
 }
 
-struct AsyncFnStream<Exec, F, Item> {
-    exec: Exec,
-    _phantom: PhantomData<(fn(F), fn(fn(Item)))>,
-}
-
-impl<Exec, F, Item> Stream for AsyncFnStream<Exec, F, Item>
-where
-    F: async FnMut(Item) -> ControlFlow<()>,
-    Exec: async FnMut(F),
-{
-    type Item = Item;
-
-    async fn exec(self, mut f: impl async FnMut(Self::Item) -> ControlFlow<()>) {
-        (self.exec)(f).await;
-    }
-}
-
-fn from_async_fn<Exec, F, Item>(exec: Exec) -> impl Stream<Item = Item>
-where
-    F: async FnMut(Item) -> ControlFlow<()>,
-    Exec: async FnMut(F),
-{
-    AsyncFnStream {
-        exec,
-        _phantom: PhantomData,
-    }
-}
-
 fn from_async_iter<I: AsyncIterator>(iter: I) -> impl Stream<Item = I::Item> {
     struct Iter<I: AsyncIterator>(I);
 
@@ -73,13 +45,23 @@ fn from_iter<I>(iter: I) -> impl Stream<Item = I::Item>
 where
     I: Iterator,
 {
-    from_async_fn(
-        async move |mut f: impl async FnMut(I::Item) -> ControlFlow<()>| {
-            for item in iter {
+    struct Iter<I>(I);
+
+    impl<I> Stream for Iter<I>
+    where
+        I: Iterator,
+    {
+        type Item = I::Item;
+
+        async fn exec(self, mut f: impl async FnMut(Self::Item) -> ControlFlow<()>) {
+            let mut iter = self.0;
+            while let Some(item) = iter.next() {
                 if let ControlFlow::Break(()) = f(item).await {
                     break;
                 }
             }
-        },
-    )
+        }
+    }
+
+    Iter(iter)
 }
