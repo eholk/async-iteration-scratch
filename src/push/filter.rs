@@ -1,6 +1,7 @@
-/// Implementation of filter combinator for push-based iterators.
-///
-/// Using filter because it requires more capabilities than just `map`.
+//! Implementation of filter combinator for push-based iterators.
+//!
+//! Using filter because it requires more capabilities than just `map`.
+
 use std::ops::ControlFlow;
 
 use super::Stream;

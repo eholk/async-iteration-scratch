@@ -1,9 +1,11 @@
-/// This module experiments with push-based iterators.
+//! This module experiments with push-based iterators.
+
 use std::{async_iter::AsyncIterator, marker::PhantomData, ops::ControlFlow, pin::pin};
 
 use crate::poll::AsyncIteratorExt;
 
 mod filter;
+mod merge;
 
 pub trait Stream {
     type Item;
