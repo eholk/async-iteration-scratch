@@ -22,15 +22,18 @@ where
 {
     type Item = S::Item;
 
-    async fn exec(mut self, mut f: impl async FnMut(Self::Item) -> ControlFlow<()>) {
+    async fn exec(mut self, mut f: impl async FnMut(Option<Self::Item>) -> ControlFlow<()>) {
         self.stream
             .exec(async |item| {
-                if (self.predicate)(&item).await {
-                    f(item).await?;
+                if let Some(item) = item {
+                    if (self.predicate)(&item).await {
+                        f(Some(item)).await?;
+                    }
                 }
                 ControlFlow::Continue(())
             })
             .await;
+        f(None).await;
     }
 }
 

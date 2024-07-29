@@ -7,6 +7,8 @@ use crate::Either;
 
 mod join;
 
+pub use join::{join, JoinFuture, JoinRoot, JoinWith};
+
 pub async fn race<A, B>(a: A, b: B) -> Either<A::Output, B::Output>
 where
     A: IntoFuture,

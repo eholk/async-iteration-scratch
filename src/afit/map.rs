@@ -32,8 +32,6 @@ where
 
 #[cfg(test)]
 mod test {
-    use std::iter;
-
     use crate::{
         afit::{async_iter_from_iter, map::map, AsyncIterator},
         block_on,

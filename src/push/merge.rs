@@ -6,7 +6,10 @@ use std::{
     task::{Poll, Waker},
 };
 
-use crate::Either;
+use crate::{
+    future_combinators::{join, race, JoinFuture},
+    Either,
+};
 
 use super::Stream;
 
@@ -97,20 +100,73 @@ where
 {
     type Item = Either<A::Item, B::Item>;
 
-    // async fn exec(self, f: impl async FnMut(Self::Item) -> std::ops::ControlFlow<()>) {
-    //     with_pipe(async |atx, arx| {
-    //         with_pipe(async |btx, brx| {
-    //             let mut a_done = false;
-    //             let mut b_done = false;
+    async fn exec(self, mut f: impl async FnMut(Option<Self::Item>) -> std::ops::ControlFlow<()>) {
+        with_pipe(async |mut atx, mut arx| {
+            with_pipe(async |mut btx, mut brx| {
+                join(async {
+                    let mut a_done = false;
+                    let mut b_done = false;
 
-                
-
-    //             // TODO: create a task that reads from the first stream, then
-    //             // another for the second task, and a root task that races
-    //             // reading the other two until both are complete.
-    //         })
-    //         .await
-    //     })
-    //     .await
-    // }
+                    loop {
+                        match (a_done, b_done) {
+                            (true, true) => break,
+                            (false, false) => match race(arx.get(), brx.get()).await {
+                                Either::Left(Some(i)) => match f(Some(Either::Left(i))).await {
+                                    std::ops::ControlFlow::Break(()) => break,
+                                    std::ops::ControlFlow::Continue(()) => {}
+                                },
+                                Either::Left(None) => {
+                                    a_done = true;
+                                }
+                                Either::Right(Some(i)) => match f(Some(Either::Right(i))).await {
+                                    std::ops::ControlFlow::Break(()) => break,
+                                    std::ops::ControlFlow::Continue(()) => {}
+                                },
+                                Either::Right(None) => {
+                                    b_done = true;
+                                }
+                            },
+                            (false, true) => match arx.get().await {
+                                Some(i) => match f(Some(Either::Left(i))).await {
+                                    std::ops::ControlFlow::Break(()) => break,
+                                    std::ops::ControlFlow::Continue(()) => {}
+                                },
+                                None => {
+                                    a_done = true;
+                                }
+                            },
+                            (true, false) => match brx.get().await {
+                                Some(i) => match f(Some(Either::Right(i))).await {
+                                    std::ops::ControlFlow::Break(()) => break,
+                                    std::ops::ControlFlow::Continue(()) => {}
+                                },
+                                None => {
+                                    b_done = true;
+                                }
+                            },
+                        }
+                    }
+                })
+                .with(async {
+                    self.a
+                        .exec(async |item| {
+                            atx.put(item).await;
+                            std::ops::ControlFlow::Continue(())
+                        })
+                        .await;
+                })
+                .with(async {
+                    self.b
+                        .exec(async |item| {
+                            btx.put(item).await;
+                            std::ops::ControlFlow::Continue(())
+                        })
+                        .await;
+                })
+                .await
+            })
+            .await
+        })
+        .await
+    }
 }

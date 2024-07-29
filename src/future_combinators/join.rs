@@ -1,10 +1,12 @@
 //! This is a flexible, static join combinator that lets you build up a root
 //! task with some number of side-effect tasks that run concurrently with the
 //! root.
-//! 
+//!
 //! One downside is that when the root task completes, all the other tasks are
 //! cancelled. Things also probably break if one of the other tasks finishes
 //! first.
+//!
+//! This is also probably horribly wrong if we ever had non-trivial wakers.
 
 use std::{
     future::poll_fn,
@@ -37,7 +39,7 @@ where
     }
 }
 
-struct JoinRoot<F: Future> {
+pub struct JoinRoot<F: Future> {
     future: F,
 }
 
@@ -56,7 +58,7 @@ where
     }
 }
 
-struct JoinWith<F: Future, G: JoinFuture> {
+pub struct JoinWith<F: Future, G: JoinFuture> {
     future: F,
     next: G,
 }
@@ -133,7 +135,7 @@ where
 mod test {
     use std::{cell::RefCell, future::poll_fn, task::Poll};
 
-    use crate::{block_on, poll};
+    use crate::block_on;
 
     use super::{join, JoinFuture};
 
@@ -141,18 +143,18 @@ mod test {
     fn join_futures() {
         let cell1 = RefCell::new(0);
         let cell2 = RefCell::new(0);
-        let f = join(poll_fn(|cx| {
+        let f = join(poll_fn(|_cx| {
             if *cell1.borrow() < 10 && *cell2.borrow() < 10 {
                 Poll::Pending
             } else {
                 Poll::Ready(*cell1.borrow() + *cell2.borrow())
             }
         }))
-        .with(poll_fn(|cx| {
+        .with(poll_fn(|_cx| {
             *cell1.borrow_mut() += 1;
             Poll::Ready(())
         }))
-        .with(poll_fn(|cx| {
+        .with(poll_fn(|_cx| {
             *cell2.borrow_mut() += 1;
             Poll::Ready(())
         }));
