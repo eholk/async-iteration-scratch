@@ -49,7 +49,7 @@ fn from_async_iter<I: AsyncIterator>(iter: I) -> impl Stream<Item = I::Item> {
     Iter(iter)
 }
 
-fn from_iter<I>(iter: I) -> impl Stream<Item = I::Item>
+pub fn from_iter<I>(iter: I) -> impl Stream<Item = I::Item>
 where
     I: Iterator,
 {

@@ -170,3 +170,28 @@ where
         .await
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::push::{from_iter, Stream};
+    use crate::{block_on, Either};
+
+    use super::Merge;
+
+    #[test]
+    fn test_merge() {
+        let a = vec![1, 2, 3];
+        let b = vec![4, 5, 6];
+        let merged = Merge::new(from_iter(a.into_iter()), from_iter(b.into_iter()));
+        let mut output = Vec::new();
+        block_on(merged.for_each(async |item| {
+            output.push(match item {
+                Either::Left(i) => i,
+                Either::Right(i) => i,
+            });
+        }));
+        for i in 1..=6 {
+            assert!(output.contains(&i));
+        }
+    }
+}
