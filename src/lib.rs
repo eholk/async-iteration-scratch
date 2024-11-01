@@ -4,39 +4,120 @@
 //!
 //! This module contains code that is used in common between the other two.
 
-#![feature(
-    async_iterator,
-    noop_waker,
-    async_for_loop,
-    gen_blocks,
-    async_closure,
-    impl_trait_in_assoc_type
-)]
-#![allow(unstable_features)]
+#![feature(pin_ergonomics)]
+#![allow(unstable_features, incomplete_features)]
 
-use std::future::Future;
-use std::pin::pin;
-use std::task::{Context, Poll};
+use std::ops::{Deref, DerefMut};
 
-mod afit;
-mod future_combinators;
-mod poll;
-mod push;
-
-pub enum Either<A, B> {
-    Left(A),
-    Right(B),
+pub trait Iterator {
+    type Item;
+    fn next(&mut self) -> Option<Self::Item>;
 }
 
-fn block_on<F: IntoFuture>(f: F) -> F::Output {
-    let waker = std::task::Waker::noop();
-    let mut cx = Context::from_waker(&waker);
+pub trait IntoIterator {
+    type Item;
+    type IntoIter: Iterator<Item = Self::Item>;
+    fn into_iter(self) -> Self::IntoIter;
+}
 
-    let mut f = pin!(f.into_future());
-    loop {
-        match f.as_mut().poll(&mut cx) {
-            Poll::Ready(val) => return val,
-            Poll::Pending => (),
+pub trait Generator {
+    type Item;
+    fn next(self: &pin mut Self) -> Option<Self::Item>;
+}
+
+pub trait IntoGenerator {
+    type Item;
+    type IntoGen: Generator<Item = Self::Item>;
+    fn into_gen(self) -> Self::IntoGen;
+}
+
+macro_rules! for_gen {
+    ($x:ident in $e:expr => $body:expr) => {
+        let mut gn = core::pin::pin!($e.into_gen());
+        loop {
+            match gn.next() {
+                Some($x) => $body,
+                None => break,
+            }
         }
+    };
+}
+
+impl<I: IntoIterator> IntoGenerator for I {
+    type Item = I::Item;
+    type IntoGen = ForceUnpin<I::IntoIter>;
+    fn into_gen(self) -> Self::IntoGen {
+        ForceUnpin(self.into_iter())
+    }
+}
+
+pub struct ForceUnpin<T>(T);
+
+impl<T> Unpin for ForceUnpin<T> {}
+
+impl<T> Deref for ForceUnpin<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> DerefMut for ForceUnpin<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<T> Generator for T
+where
+    T: DerefMut + Unpin,
+    T::Target: Iterator,
+{
+    type Item = <T::Target as Iterator>::Item;
+    fn next(mut self: &pin mut Self) -> Option<Self::Item> {
+        self.deref_mut().next()
+    }
+}
+
+impl<I: Iterator> IntoIterator for I {
+    type Item = I::Item;
+    type IntoIter = I;
+    fn into_iter(self) -> Self::IntoIter {
+        self
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    struct CountTo {
+        limit: usize,
+        count: usize,
+    }
+
+    impl Iterator for CountTo {
+        type Item = usize;
+        fn next(&mut self) -> Option<Self::Item> {
+            if self.count < self.limit {
+                self.count += 1;
+                Some(self.count)
+            } else {
+                None
+            }
+        }
+    }
+
+    fn count_to(limit: usize) -> CountTo {
+        CountTo { limit, count: 0 }
+    }
+
+    #[test]
+    fn for_count_to() {
+        let mut sum = 0;
+        for_gen!(x in count_to(5) => {
+            sum += x;
+        });
+        assert_eq!(sum, 15);
     }
 }
