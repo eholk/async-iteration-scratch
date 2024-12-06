@@ -4,10 +4,7 @@
 #![feature(pin_ergonomics, negative_impls, with_negative_coherence)]
 #![allow(unstable_features, incomplete_features, internal_features)]
 
-use std::{
-    ops::{Deref, DerefMut},
-    pin::Pin,
-};
+use core::pin::Pin;
 
 pub trait Iterator {
     type Item;
@@ -49,19 +46,6 @@ pub struct IteratorGenerator<T: Iterator>(T);
 
 impl<T: Iterator> Unpin for IteratorGenerator<T> {}
 
-// impl<T: Iterator> Deref for IteratorGenerator<T> {
-//     type Target = T;
-//     fn deref(&self) -> &Self::Target {
-//         &self.0
-//     }
-// }
-
-// impl<T: Iterator> DerefMut for IteratorGenerator<T> {
-//     fn deref_mut(&mut self) -> &mut Self::Target {
-//         &mut self.0
-//     }
-// }
-
 impl<T: Iterator> Generator for IteratorGenerator<T> {
     type Item = <T as Iterator>::Item;
 
@@ -79,17 +63,6 @@ impl<I: IntoIterator> IntoGenerator for I {
     }
 }
 
-// impl<T> Generator for T
-// where
-//     T: DerefMut + Unpin,
-//     T::Target: Iterator,
-// {
-//     type Item = <T::Target as Iterator>::Item;
-//     fn next(mut self: &pin mut Self) -> Option<Self::Item> {
-//         self.deref_mut().next()
-//     }
-// }
-
 impl<I: Iterator> IntoIterator for I {
     type Item = <I as Iterator>::Item;
     type IntoIter = I;
@@ -106,16 +79,13 @@ impl<G: Generator> IntoGenerator for G {
     }
 }
 
-impl<G: Generator> !IntoIterator for G {}
-impl<G: Generator> !Iterator for G {}
+impl<G: Generator> Iterator for Pin<&mut G> {
+    type Item = G::Item;
 
-// impl<G: Generator> Iterator for Pin<G> {
-//     type Item = <G as Generator>::Item;
-
-//     fn next(&mut self) -> Option<Self::Item> {
-//         self.deref_mut().next()
-//     }
-// }
+    fn next(&mut self) -> Option<Self::Item> {
+        Generator::next(*self)
+    }
+}
 
 #[cfg(test)]
 mod test {
@@ -199,9 +169,9 @@ mod test {
         sum
     }
 
-    // #[test]
-    // fn use_generator_as_iterator() {
-    //     let sum = count_iterator(pin!(count_to_gen(5)));
-    //     assert_eq!(sum, 15);
-    // }
+    #[test]
+    fn use_generator_as_iterator() {
+        let sum = count_iterator(pin!(count_to_gen(5)));
+        assert_eq!(sum, 15);
+    }
 }
