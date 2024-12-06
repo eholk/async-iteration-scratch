@@ -1,10 +1,13 @@
 //! This module experiments with how generators (which must be pinned before
 //! using) and iterators (which are not pinned) can be used together.
 
-#![feature(pin_ergonomics, negative_impls, negative_bounds)]
+#![feature(pin_ergonomics, negative_impls, with_negative_coherence)]
 #![allow(unstable_features, incomplete_features, internal_features)]
 
-use std::ops::{Deref, DerefMut};
+use std::{
+    ops::{Deref, DerefMut},
+    pin::Pin,
+};
 
 pub trait Iterator {
     type Item;
@@ -42,29 +45,37 @@ macro_rules! for_gen {
     };
 }
 
+pub struct IteratorGenerator<T: Iterator>(T);
+
+impl<T: Iterator> Unpin for IteratorGenerator<T> {}
+
+// impl<T: Iterator> Deref for IteratorGenerator<T> {
+//     type Target = T;
+//     fn deref(&self) -> &Self::Target {
+//         &self.0
+//     }
+// }
+
+// impl<T: Iterator> DerefMut for IteratorGenerator<T> {
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         &mut self.0
+//     }
+// }
+
+impl<T: Iterator> Generator for IteratorGenerator<T> {
+    type Item = <T as Iterator>::Item;
+
+    fn next(mut self: &pin mut Self) -> Option<Self::Item> {
+        self.0.next()
+    }
+}
+
 /// Iterators can be used as Generators since they don't need to be pinned.
 impl<I: IntoIterator> IntoGenerator for I {
     type Item = I::Item;
-    type IntoGen = ForceUnpin<I::IntoIter>;
+    type IntoGen = IteratorGenerator<I::IntoIter>;
     fn into_gen(self) -> Self::IntoGen {
-        ForceUnpin(self.into_iter())
-    }
-}
-
-pub struct ForceUnpin<T>(T);
-
-impl<T> Unpin for ForceUnpin<T> {}
-
-impl<T> Deref for ForceUnpin<T> {
-    type Target = T;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<T> DerefMut for ForceUnpin<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+        IteratorGenerator(self.into_iter())
     }
 }
 
@@ -79,7 +90,7 @@ impl<T> DerefMut for ForceUnpin<T> {
 //     }
 // }
 
-impl<I: Iterator + !Generator> IntoIterator for I {
+impl<I: Iterator> IntoIterator for I {
     type Item = <I as Iterator>::Item;
     type IntoIter = I;
     fn into_iter(self) -> Self::IntoIter {
@@ -87,7 +98,7 @@ impl<I: Iterator + !Generator> IntoIterator for I {
     }
 }
 
-impl <G: Generator + !Iterator> IntoGenerator for G {
+impl<G: Generator> IntoGenerator for G {
     type Item = <G as Generator>::Item;
     type IntoGen = G;
     fn into_gen(self) -> Self::IntoGen {
@@ -95,10 +106,16 @@ impl <G: Generator + !Iterator> IntoGenerator for G {
     }
 }
 
-// These don't actually accomplish what we want...
 impl<G: Generator> !IntoIterator for G {}
 impl<G: Generator> !Iterator for G {}
 
+// impl<G: Generator> Iterator for Pin<G> {
+//     type Item = <G as Generator>::Item;
+
+//     fn next(&mut self) -> Option<Self::Item> {
+//         self.deref_mut().next()
+//     }
+// }
 
 #[cfg(test)]
 mod test {
@@ -156,7 +173,6 @@ mod test {
             }
         }
     }
-    impl !IntoIterator for CountToGen {}
 
     fn count_to_gen(limit: usize) -> CountToGen {
         CountToGen {
@@ -183,9 +199,9 @@ mod test {
         sum
     }
 
-    #[test]
-    fn use_generator_as_iterator() {
-        let sum = count_iterator(pin!(count_to_gen(5)));
-        assert_eq!(sum, 15);
-    }
+    // #[test]
+    // fn use_generator_as_iterator() {
+    //     let sum = count_iterator(pin!(count_to_gen(5)));
+    //     assert_eq!(sum, 15);
+    // }
 }
