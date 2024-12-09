@@ -87,6 +87,9 @@ impl<G: Generator> Iterator for Pin<&mut G> {
     }
 }
 
+impl<T: Generator> !IntoIterator for T  { }
+impl<T: IntoIterator> !Generator for T { }
+
 #[cfg(test)]
 mod test {
     use super::*;
