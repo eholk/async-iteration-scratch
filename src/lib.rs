@@ -5,6 +5,7 @@
 #![allow(unstable_features, incomplete_features, internal_features)]
 
 use core::pin::Pin;
+use core::ops::{Deref, DerefMut};
 
 pub trait Iterator {
     type Item;
@@ -79,16 +80,20 @@ impl<G: Generator> IntoGenerator for G {
     }
 }
 
-impl<G: Generator> Iterator for Pin<&mut G> {
-    type Item = G::Item;
+impl<G> Iterator for Pin<G>
+where
+    G: DerefMut,
+    G::Target: Generator,
+{
+    type Item = <<G as Deref>::Target as Generator>::Item;
 
     fn next(&mut self) -> Option<Self::Item> {
-        Generator::next(*self)
+        Generator::next(self.as_mut())
     }
 }
 
-impl<T: Generator> !IntoIterator for T  { }
-impl<T: IntoIterator> !Generator for T { }
+impl<T: Generator> !IntoIterator for T {}
+impl<T: IntoIterator> !Generator for T {}
 
 #[cfg(test)]
 mod test {
