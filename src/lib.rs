@@ -2,10 +2,12 @@
 //! using) and iterators (which are not pinned) can be used together.
 
 #![feature(pin_ergonomics, negative_impls, with_negative_coherence)]
+#![feature(coroutine_trait, coroutines)]
 #![allow(unstable_features, incomplete_features, internal_features)]
 
-use core::pin::Pin;
 use core::ops::{Deref, DerefMut};
+use core::pin::Pin;
+use std::ops::{Coroutine, CoroutineState};
 
 pub trait Iterator {
     type Item;
@@ -95,6 +97,17 @@ where
 impl<T: Generator> !IntoIterator for T {}
 impl<T: IntoIterator> !Generator for T {}
 
+impl<T: Coroutine<(), Return = ()>> Generator for T {
+    type Item = T::Yield;
+
+    fn next(self: &pin mut Self) -> Option<T::Yield> {
+        match self.resume(()) {
+            CoroutineState::Complete(()) => None,
+            CoroutineState::Yielded(val) => Some(val),
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -180,6 +193,24 @@ mod test {
     #[test]
     fn use_generator_as_iterator() {
         let sum = count_iterator(pin!(count_to_gen(5)));
+        assert_eq!(sum, 15);
+    }
+
+    fn count_to_coro(v: Vec<usize>) -> impl Coroutine<(), Yield = usize, Return = ()> {
+        #[coroutine]
+        static move |()| {
+            for x in &v {
+                yield *x;
+            }
+        }
+    }
+
+    #[test]
+    fn use_coroutine_as_generator() {
+        let mut sum = 0;
+        for_gen!(x in count_to_coro(vec![1, 2, 3, 4, 5]) => {
+            sum += x;
+        });
         assert_eq!(sum, 15);
     }
 }
